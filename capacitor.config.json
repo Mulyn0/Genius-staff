@@ -1,0 +1,3 @@
+{"appId":"id.biz.gns.staff","appName":"GENIUS NET Staf","webDir":"www",
+"server":{"androidScheme":"https"},
+"plugins":{"CapacitorHttp":{"enabled":true}}}
