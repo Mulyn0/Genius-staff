@@ -1,1 +1,100 @@
-
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2a1745">
+<title>GENIUS NET Staf</title>
+<style>
+:root{--ink:#1d1633;--mut:#6b6580;--bg:#f6f4fa;--card:#fff;--line:#e4e0ee;--g1:#e8402a;--g2:#f08a24;--g3:#6b2fa0;--ok:#1f7a4d}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--bg);padding-top:env(safe-area-inset-top)}
+#app{display:flex;flex-direction:column;height:100%}
+header{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#2a1745;color:#fff}
+.logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--g1),var(--g2) 50%,var(--g3));display:grid;place-items:center;font-weight:800;font-size:20px}
+header b{display:block;font-size:16px}header small{opacity:.75}
+header button{margin-left:auto;background:none;border:1px solid #fff5;color:#fff;border-radius:8px;padding:8px 12px;font-size:14px}
+main{flex:1;overflow:auto;padding:16px}
+nav{display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;padding:14px 4px;border:0;background:none;font-size:15px;color:var(--mut);border-top:3px solid transparent}
+nav button.on{color:var(--g3);font-weight:700;border-top-color:var(--g3)}
+.login{max-width:380px;margin:12vh auto 0;padding:0 20px}
+.login h1{font-size:24px;margin:16px 0 4px}.login p{color:var(--mut);margin-bottom:20px}
+input{width:100%;padding:14px;border:1px solid var(--line);border-radius:10px;font-size:16px;margin-bottom:12px;background:#fff}
+input:focus,button:focus-visible{outline:3px solid #6b2fa055}
+.btn{width:100%;padding:14px;border:0;border-radius:10px;background:var(--g3);color:#fff;font-size:16px;font-weight:700}
+.err{color:var(--g1);margin:0 0 12px;min-height:1.4em}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+.stat span{display:block;color:var(--mut);font-size:13px}.stat b{font-size:20px}
+h2{font-size:15px;color:var(--mut);margin:18px 0 8px;font-weight:600}
+.row{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px}
+.row b{display:block}.row small{color:var(--mut);display:block;word-break:break-word}
+.q{margin-bottom:12px}.empty{color:var(--mut);text-align:center;padding:40px 0}
+</style></head>
+<body><div id="app"></div>
+<script>
+const BASE='https://billing.gns.biz.id/api/customer',K='gns_staff';
+let S=JSON.parse(localStorage.getItem(K)||'null'),tab=0,Q='';
+const TABS={
+ admin:[['Ringkasan','/app/admin/dashboard'],['Pelanggan','/app/admin/customers'],['Tiket','/app/admin/tickets'],['Setoran','/app/admin/collector-payments']],
+ collector:[['Tagihan','/app/collector/dashboard'],['Riwayat','/app/collector/history'],['Absen','/app/collector/attendance/today']],
+ tech:[['Tugas','/app/tech/dashboard'],['Tiket saya','/tech/tasks'],['Absen','/app/tech/attendance/today']]};
+const ROLE={admin:'admin',cashier:'admin',root:'admin',collector:'collector',tech:'tech'};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $=s=>document.querySelector(s);
+const hum=k=>k.replace(/_/g,' ').replace(/([a-z])([A-Z])/g,'$1 $2').replace(/^./,c=>c.toUpperCase());
+const money=(k,v)=>typeof v==='number'&&/total|amount|jumlah|revenue|pendapatan|nominal|tagihan|harga|saldo|income|expense/i.test(k)?'Rp '+v.toLocaleString('id-ID'):v;
+async function api(path,opt={}){
+ const r=await fetch(BASE+path,{...opt,headers:{'Content-Type':'application/json',Authorization:'Bearer '+(S?.token||'')}});
+ if(r.status===401&&S){logout();throw new Error('Sesi habis, silakan masuk lagi.')}
+ const d=await r.json().catch(()=>({}));
+ if(!r.ok||d.success===false)throw new Error(d.message||'Gagal memuat data ('+r.status+')');
+ return d}
+function logout(){S=null;localStorage.removeItem(K);tab=0;Q='';shell()}
+async function login(){
+ const u=$('#u').value.trim(),p=$('#p').value,e=$('#e');e.textContent='';
+ if(!u||!p){e.textContent='Isi username dan password.';return}
+ $('#go').disabled=true;$('#go').textContent='Memproses...';
+ let d=null,last='Username atau password salah.';
+ for(const path of['/auth/login','/tech/login']){
+  try{const r=await fetch(BASE+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,loginId:u,password:p})});
+   const j=await r.json().catch(()=>({}));
+   if(j.success&&j.token){d=j;d.role=j.role||(path==='/tech/login'?'tech':'');d.user=j.user||j.tech||{};break}
+   if(j.message)last=j.message}catch(x){last='Tidak bisa terhubung ke server.'}}
+ if(!d||!ROLE[d.role]){e.textContent=d?'Peran "'+d.role+'" belum didukung di app staf.':last;$('#go').disabled=false;$('#go').textContent='Masuk';return}
+ S={token:d.token,role:ROLE[d.role],name:d.user.name||u};localStorage.setItem(K,JSON.stringify(S));tab=0;shell()}
+function unwrap(d){if(d&&typeof d==='object'&&!Array.isArray(d)){const{success,message,...r}=d;const k=Object.keys(r);return k.length===1?r[k[0]]:r}return d}
+const sc=v=>v===null||typeof v!=='object';
+function stats(o){const e=Object.entries(o).filter(([,v])=>sc(v)&&v!=='');
+ return e.length?'<div class="stats">'+e.map(([k,v])=>`<div class="stat"><span>${esc(hum(k))}</span><b>${esc(money(k,v))}</b></div>`).join('')+'</div>':''}
+function list(a){
+ if(!a.length)return'<div class="empty">Belum ada data.</div>';
+ return a.map(it=>{if(sc(it))return`<div class="row"><b>${esc(it)}</b></div>`;
+  const t=it.name||it.nama||it.customer_name||it.title||it.subject||it.username||it.invoice_number||('#'+(it.id??''));
+  const m=Object.entries(it).filter(([k,v])=>sc(v)&&v!==''&&v!==t&&k!=='id'&&!/pass|token/i.test(k)).slice(0,5).map(([k,v])=>`${esc(hum(k))}: ${esc(money(k,v))}`);
+  return`<div class="row" data-s="${esc((t+' '+m.join(' ')).toLowerCase())}"><b>${esc(t)}</b>${m.map(x=>`<small>${x}</small>`).join('')}</div>`}).join('')}
+function view(d){d=unwrap(d);
+ if(Array.isArray(d))return'<input class="q" id="q" placeholder="Cari..." value="'+esc(Q)+'">'+list(d);
+ let h=stats(d);
+ for(const[k,v]of Object.entries(d)){if(sc(v))continue;
+  h+='<h2>'+esc(hum(k))+'</h2>'+(Array.isArray(v)?list(v):stats(v)||'')}
+ return h||'<div class="empty">Belum ada data.</div>'}
+async function load(){
+ const m=$('main');m.innerHTML='<div class="empty">Memuat...</div>';
+ try{m.innerHTML=view(await api(TABS[S.role][tab][1]));
+  const q=$('#q');if(q)q.oninput=()=>{Q=q.value.toLowerCase();document.querySelectorAll('.row').forEach(r=>r.style.display=r.dataset.s.includes(Q)?'':'none')}}
+ catch(e){if(S)m.innerHTML='<div class="empty">'+esc(e.message)+'</div>'}}
+function shell(){
+ const a=$('#app');
+ if(!S){a.innerHTML=`<div class="login"><div class="logo" style="color:#fff">G</div><h1>GENIUS NET Staf</h1><p>Masuk sebagai admin, teknisi, atau kolektor.</p>
+  <input id="u" placeholder="Username" autocapitalize="none" autocomplete="username"><input id="p" type="password" placeholder="Password" autocomplete="current-password">
+  <div class="err" id="e"></div><button class="btn" id="go">Masuk</button></div>`;
+  $('#go').onclick=login;$('#p').onkeydown=e=>{if(e.key==='Enter')login()};return}
+ const L={admin:'Admin',collector:'Kolektor',tech:'Teknisi'};
+ a.innerHTML=`<header><div class="logo">G</div><div><b>${esc(S.name)}</b><small>${L[S.role]}</small></div><button id="out">Keluar</button></header><main></main>
+  <nav>${TABS[S.role].map((t,i)=>`<button data-i="${i}" class="${i===tab?'on':''}">${t[0]}</button>`).join('')}</nav>`;
+ $('#out').onclick=logout;
+ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{tab=+b.dataset.i;Q='';shell()});
+ load()}
+shell();
+</script></body></html>
