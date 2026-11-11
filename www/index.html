@@ -38,6 +38,15 @@ main.mp{padding:0;overflow:hidden;display:flex;flex-direction:column}#map{flex:1
 .ov{position:fixed;inset:0;background:#0008;display:flex;align-items:flex-end;z-index:9999}
 .sh{background:#fff;width:100%;padding:16px 16px calc(16px + env(safe-area-inset-bottom));border-radius:16px 16px 0 0}
 .sh b{display:block;margin-bottom:10px}.sh button{display:block;width:100%;padding:14px;margin-bottom:8px;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:16px}.sh .gh{border:0;color:var(--mut)}
+main.mp{position:relative}
+.fab{position:absolute;right:12px;bottom:46px;display:flex;flex-direction:column;gap:8px;z-index:1100}
+.fab button{background:var(--g3);color:#fff;border:0;border-radius:99px;padding:12px 18px;font-size:15px;font-weight:700;box-shadow:0 2px 8px #0005}
+.odp{background:var(--g3);color:#fff;font:700 11px system-ui;text-align:center;border-radius:4px;padding:2px 0;border:2px solid #fff}
+.pb{margin-top:6px;padding:8px 12px;background:var(--g3);color:#fff;border:0;border-radius:8px;font-size:14px}
+#toast{position:fixed;top:calc(env(safe-area-inset-top) + 70px);left:12px;right:12px;background:#1d1633;color:#fff;padding:10px 14px;border-radius:10px;z-index:10000;text-align:center}
+.sh.fm{max-height:88%;overflow:auto}.sh label{display:block;font-size:13px;color:var(--mut);margin:6px 0 4px}
+.sh input{margin-bottom:8px}.sh select{width:100%;margin-bottom:8px;border:1px solid var(--line);border-radius:10px;padding:6px;font-size:15px;background:#fff}
+.sh .btn{background:var(--g3);color:#fff;border:0;font-weight:700}.lr{display:flex;gap:8px}
 .q{margin-bottom:12px}.empty{color:var(--mut);text-align:center;padding:40px 0}
 </style></head>
 <body><div id="app"></div>
@@ -46,9 +55,9 @@ main.mp{padding:0;overflow:hidden;display:flex;flex-direction:column}#map{flex:1
 const BASE='https://billing.gns.biz.id/api/customer',K='gns_staff';
 let S=JSON.parse(localStorage.getItem(K)||'null'),tab=0,Q='';
 const TABS={
- admin:[['Ringkasan','/app/admin/dashboard'],['Pelanggan','/app/admin/customers'],['Peta','/app/collector/customers/map','map'],['ONU','/app/tech/tr069/devices','onu'],['Tiket','/app/admin/tickets'],['Setoran','/app/admin/collector-payments']],
+ admin:[['Ringkasan','/app/admin/dashboard'],['Pelanggan','/app/admin/customers'],['Peta','/app/tech/map/overview','map2'],['ONU','/app/tech/tr069/devices','onu'],['Tiket','/app/admin/tickets'],['Setoran','/app/admin/collector-payments']],
  collector:[['Tagihan','/app/collector/dashboard'],['Peta','/app/collector/customers/map','map'],['Riwayat','/app/collector/history'],['Absen','/app/collector/attendance/today']],
- tech:[['Tugas','/app/tech/dashboard'],['Tiket saya','/tech/tasks'],['ONU','/app/tech/tr069/devices','onu'],['Peta','/app/tech/customers/map','map'],['Absen','/app/tech/attendance/today']]};
+ tech:[['Tugas','/app/tech/dashboard'],['Tiket saya','/tech/tasks'],['ONU','/app/tech/tr069/devices','onu'],['Peta','/app/tech/map/overview','map2'],['Absen','/app/tech/attendance/today']]};
 const ROLE={admin:'admin',cashier:'admin',root:'admin',collector:'collector',tech:'tech'};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const $=s=>document.querySelector(s);
@@ -130,11 +139,73 @@ function actOnu(x){
   if(a==='p'){const v=prompt('Password WiFi baru (minimal 8 karakter):');if(v&&v.length<8)alert('Minimal 8 karakter.');else if(v)post('/app/tech/tr069/device/password',{tag,password:v})}
   if(a==='r'&&confirm('Reboot ONU '+t+'?'))post('/app/tech/tr069/device/reboot',{tag});
   if(a==='k'&&confirm('Putus sesi PPPoE '+u+'?'))post('/app/tech/mikrotik/secret/kick',{username:u})}}
+let PICK=null,MC={};
+const toast=t=>{let e=$('#toast');if(!t){e&&e.remove();return}if(!e){e=document.createElement('div');e.id='toast';document.body.appendChild(e)}e.textContent=t};
+function gps(){return new Promise((ok,no)=>{
+ const C=window.Capacitor,G=C&&C.isNativePlatform&&C.isNativePlatform()?C.registerPlugin('Geolocation'):null;
+ if(G)G.getCurrentPosition({enableHighAccuracy:true,timeout:20000}).then(p=>ok([p.coords.latitude,p.coords.longitude]),e=>no(new Error('GPS gagal: '+(e.message||e))));
+ else if(navigator.geolocation)navigator.geolocation.getCurrentPosition(p=>ok([p.coords.latitude,p.coords.longitude]),e=>no(new Error('GPS gagal: '+e.message)),{enableHighAccuracy:true,timeout:20000});
+ else no(new Error('GPS tidak tersedia.'))})}
+function ov(h,save){
+ const o=document.createElement('div');o.className='ov';
+ o.innerHTML='<div class="sh fm">'+h+'<label>Lokasi</label><div class="lr"><input id="f_lat" placeholder="Latitude" inputmode="decimal"><input id="f_lng" placeholder="Longitude" inputmode="decimal"></div><button data-a="g">Ambil lokasi GPS saya</button><button data-a="m">Pilih titik di peta</button><div class="err" id="fe"></div><button class="btn" data-a="s">Simpan</button><button class="gh" data-a="x">Batal</button></div>';
+ document.body.appendChild(o);
+ const q=i=>o.querySelector('#f_'+i),fe=o.querySelector('#fe');
+ o.onclick=async e=>{const a=e.target.dataset&&e.target.dataset.a;if(!a)return;fe.textContent='';
+  if(a==='x')o.remove();
+  if(a==='g'){fe.textContent='Mencari lokasi...';try{const p=await gps();q('lat').value=p[0].toFixed(6);q('lng').value=p[1].toFixed(6);fe.textContent=''}catch(x){fe.textContent=x.message}}
+  if(a==='m'){o.style.display='none';toast('Ketuk lokasi di peta');PICK=(la,ln)=>{q('lat').value=la.toFixed(6);q('lng').value=ln.toFixed(6);o.style.display='';toast('')}}
+  if(a==='s'){e.target.disabled=true;try{await save(q,o)}catch(x){fe.textContent=x.message}e.target.disabled=false}};
+ return o}
+function formOdp(){
+ ov('<b>Tambah ODP</b><label>Nama ODP</label><input id="f_name"><label>Jumlah port</label><input id="f_cap" inputmode="numeric" value="16"><label>PON port (opsional)</label><input id="f_pon"><label>Keterangan (opsional)</label><input id="f_desc">',async(q,o)=>{
+  if(!q('name').value.trim())throw new Error('Nama ODP wajib diisi.');
+  if(!q('lat').value||!q('lng').value)throw new Error('Lokasi belum diisi.');
+  const r=await api('/app/tech/odps/create',{method:'POST',body:JSON.stringify({name:q('name').value,port_capacity:q('cap').value,pon_port:q('pon').value,description:q('desc').value,lat:q('lat').value,lng:q('lng').value})});
+  alert(r.message);o.remove();load()})}
+function formOnt(odps){
+ let devs=[],tm;
+ const o=ov('<b>Catat ONT pelanggan</b><label>Pelanggan</label><input id="f_cq" placeholder="Cari nama / PPPoE / HP"><select id="f_cust" size="4"></select><label>Perangkat ONU</label><input id="f_dq" placeholder="Cari serial / nama"><select id="f_dev" size="4"><option value="">Memuat perangkat...</option></select><label>ODP</label><select id="f_odp"><option value="">- tidak dipilih -</option>'+odps.map(x=>'<option value="'+x.id+'">'+esc(x.name)+'</option>').join('')+'</select><label>Port ODP</label><input id="f_port" inputmode="numeric">',async(q,o)=>{
+  const cid=q('cust').value;if(!cid)throw new Error('Pilih pelanggan dulu.');
+  const ds=q('dev').selectedOptions[0];
+  const r=await api('/app/tech/customers/ont',{method:'POST',body:JSON.stringify({customerId:+cid,tag:q('dev').value,serial:(ds&&ds.dataset.s)||'',odp_id:q('odp').value,odp_port:q('port').value,lat:q('lat').value,lng:q('lng').value})});
+  alert(r.message);o.remove();load()});
+ const q=i=>o.querySelector('#f_'+i);
+ q('cq').oninput=()=>{clearTimeout(tm);tm=setTimeout(async()=>{const v=q('cq').value.trim();if(v.length<2)return;
+  try{const r=await api('/app/tech/customers/search?q='+encodeURIComponent(v));q('cust').innerHTML=(r.data||[]).map(c=>'<option value="'+c.id+'">'+esc(c.name)+(c.pppoe_username?' · '+esc(c.pppoe_username):'')+'</option>').join('')||'<option value="">Tidak ditemukan</option>'}catch(e){}},350)};
+ const drawD=()=>{const v=q('dq').value.toLowerCase();q('dev').innerHTML=devs.filter(x=>!v||JSON.stringify(x).toLowerCase().includes(v)).slice(0,40).map(x=>'<option value="'+esc(x.tag||x.id)+'" data-s="'+esc(x.serialNumber||'')+'">'+esc((x.serialNumber||x.tag)+' · '+(x.status||'-')+(x.customerName?' · '+x.customerName:''))+'</option>').join('')||'<option value="">Perangkat tidak ditemukan</option>'};
+ q('dq').oninput=drawD;
+ api('/app/tech/tr069/devices').then(r=>{devs=Array.isArray(r.data)?r.data:[];drawD()}).catch(e=>{q('dev').innerHTML='<option value="">'+esc(e.message)+'</option>'})}
+window.mapOnu=id=>{const c=MC[id];if(c)actOnu({tag:c.genieacs_tag,customerName:c.name,pppoeUsername:c.pppoe_username})};
+function showMap2(d){
+ const m=$('main'),cs=d.customers||[],os=d.odps||[];
+ if(typeof L==='undefined'){m.innerHTML='<div class="empty">Peta butuh koneksi internet.</div>';return}
+ m.innerHTML='<div id="map"></div><div class="fab"><button id="aO">+ ODP</button><button id="aT">+ ONT</button></div><div class="mapbar">'+cs.length+' pelanggan, '+os.length+' ODP. Hijau: ONU online, merah: offline, abu: ONU belum terhubung.</div>';
+ if(MAP){MAP.remove();MAP=null}
+ MAP=L.map('map').setView([-2.5,118],5);
+ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(MAP);
+ const ok=(a,b)=>isFinite(parseFloat(a))&&isFinite(parseFloat(b)),pts=[],OD={};
+ os.filter(o=>ok(o.lat,o.lng)).forEach(o=>{OD[o.id]=[+o.lat,+o.lng];
+  L.marker(OD[o.id],{icon:L.divIcon({className:'',html:'<div class="odp">ODP</div>',iconSize:[34,20],iconAnchor:[17,10]})}).addTo(MAP)
+   .bindPopup('<b>'+esc(o.name)+'</b><br>Terpakai '+o.used+' / '+(o.port_capacity||'-')+' port'+(o.description?'<br>'+esc(o.description):''));pts.push(OD[o.id])});
+ MC={};
+ cs.filter(c=>ok(c.lat,c.lng)).forEach(c=>{MC[c.id]=c;const p=[+c.lat,+c.lng];
+  const col=c.onu==='online'?'#1f7a4d':c.onu==='offline'?'#d32f2f':'#8a8599';
+  if(c.odp_id&&OD[c.odp_id]){let mid=[];try{const j=JSON.parse(c.cable_path);if(Array.isArray(j))mid=j.map(x=>Array.isArray(x)?[+x[0],+x[1]]:[+x.lat,+x.lng]).filter(x=>ok(x[0],x[1]))}catch(e){}
+   L.polyline([OD[c.odp_id],...mid,p],{color:'#281670',weight:2,opacity:.45,dashArray:'4 4'}).addTo(MAP)}
+  L.circleMarker(p,{radius:8,color:'#fff',weight:2,fillColor:col,fillOpacity:.95}).addTo(MAP).bindPopup(
+   '<b>'+esc(c.name)+'</b><br>'+esc(c.address||'')+'<br>ONU: '+esc(c.onu)+(c.phone?'<br><a href="tel:'+esc(c.phone)+'">'+esc(c.phone)+'</a>':'')+
+   (c.genieacs_tag?'<br><button class="pb" onclick="mapOnu('+c.id+')">Menu ONU</button>':'')+'<br><a href="geo:'+p[0]+','+p[1]+'?q='+p[0]+','+p[1]+'">Navigasi</a>');pts.push(p)});
+ if(pts.length)MAP.fitBounds(pts,{padding:[30,30],maxZoom:17});
+ MAP.on('click',e=>{if(PICK){const f=PICK;PICK=null;f(e.latlng.lat,e.latlng.lng)}});
+ $('#aO').onclick=formOdp;$('#aT').onclick=()=>formOnt(os);
+ setTimeout(()=>MAP.invalidateSize(),80)}
 async function load(){
- const m=$('main'),t=TABS[S.role][tab];m.classList.toggle('mp',t[2]==='map');
+ const m=$('main'),t=TABS[S.role][tab];m.classList.toggle('mp',t[2]==='map'||t[2]==='map2');
  m.innerHTML='<div class="empty">Memuat...</div>';
  try{const d=await api(t[1]);
   if(t[2]==='map')return showMap(d);
+  if(t[2]==='map2')return showMap2(d);
   if(t[2]==='onu')return showOnu(d);
   m.innerHTML=view(d);
   const q=$('#q');if(q)q.oninput=()=>{Q=q.value.toLowerCase();document.querySelectorAll('.row').forEach(r=>r.style.display=r.dataset.s.includes(Q)?'':'none')}}
