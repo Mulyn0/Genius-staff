@@ -15,7 +15,12 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
       - run: npm install
+      - run: npm install @capacitor/geolocation@^6.0.0
       - run: npx cap add android
+      - name: Buat ikon aplikasi
+        run: |
+          mkdir -p assets && cp icon.png assets/icon.png
+          npx --yes @capacitor/assets generate --android --iconBackgroundColor '#ffffff' --iconBackgroundColorDark '#ffffff'
       - run: npx cap sync android
       - name: Set versi
         run: |
