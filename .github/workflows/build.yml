@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -15,8 +17,25 @@ jobs:
       - run: npm install
       - run: npx cap add android
       - run: npx cap sync android
-      - run: cd android && chmod +x gradlew && ./gradlew assembleDebug
-      - uses: actions/upload-artifact@v4
+      - name: Set versi
+        run: |
+          sed -i "s/versionCode 1/versionCode ${{ github.run_number }}/" android/app/build.gradle
+          sed -i "s/versionName \"1.0\"/versionName \"1.0.${{ github.run_number }}\"/" android/app/build.gradle
+      - name: Build release
+        run: cd android && chmod +x gradlew && ./gradlew assembleRelease
+      - name: Tanda tangan APK
+        env:
+          KS_B64: ${{ secrets.KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASS }}
+        run: |
+          echo "$KS_B64" | base64 -d > genius.keystore
+          BT=$(ls -d $ANDROID_SDK_ROOT/build-tools/* | sort -V | tail -1)
+          IN=android/app/build/outputs/apk/release/app-release-unsigned.apk
+          $BT/zipalign -p -f 4 $IN aligned.apk
+          $BT/apksigner sign --ks genius.keystore --ks-pass env:KS_PASS --key-pass env:KS_PASS --ks-key-alias genius --out genius-staf.apk aligned.apk
+          $BT/apksigner verify genius-staf.apk
+      - uses: softprops/action-gh-release@v2
         with:
-          name: genius-staf-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          tag_name: v1.0.${{ github.run_number }}
+          name: GENIUS NET Staf 1.0.${{ github.run_number }}
+          files: genius-staf.apk
